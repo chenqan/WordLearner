@@ -75,6 +75,3 @@ def get_or_create_word(session, word, trans, ipa=None, gtts_bin=None):
     return w
 
 
-# Initialize DB on import
-init_db()
-

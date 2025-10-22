@@ -20,7 +20,7 @@ from io import BytesIO
 import numpy as np
 import time
 
-from orm_models import Session, File, Word, Display, DB_FILE
+from model.orm_models import Session, File, Word, Display, DB_FILE
 
 # Optional: TTS and audio playback helpers
 try:
