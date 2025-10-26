@@ -14,7 +14,7 @@ try:
     from pydub import AudioSegment
     import sounddevice as sd
 except Exception:
-    AudioSegment = None
+    raise "pydub lib is found"
 
 
 def token2voice(text, retries=3, base_sleep=1) -> bytes:
