@@ -11,11 +11,6 @@ A simple English vocabulary learning app built with Tkinter.
 5. Auto-save learning progress
 
 ## 🧩 Project Structure
-WordLearner/
-├── view/word_app_v2.py       # Main GUI
-├── model/word_display.py     # Data model
-├── controller/word_controller.py
-└── README.md
 
 ```shell
 WordLearner/
