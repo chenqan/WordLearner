@@ -1,9 +1,11 @@
+import copy
 import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from service.file_service import FileService
 from service.word_service import WordService, WordDisplay
+from util.editable_treeview import EditableTreeview
 
 PAGE_SIZE = 30
 
@@ -50,7 +52,15 @@ class WordApp:
 
         # 表格显示
         columns = ("word", "trans", "ipa", "sound", "status", "learned")
-        self.tree = ttk.Treeview(frame, columns=columns, show="headings", height=20)
+        editable_cols = ("word", "trans", "ipa")
+        self.tree = EditableTreeview(
+                        frame,
+                        columns=columns,
+                        editable_columns=editable_cols,
+                        show="headings",
+                        height=20,
+                        on_edit_done=self.on_cell_edited  # 绑定回调
+                    )
         self.tree.pack(fill="both", expand=True)
         for col, text, width in zip(columns,
                                     ["单词/短语", "中文翻译", "音标", "🔊播放", "状态", "结果"],
@@ -63,6 +73,8 @@ class WordApp:
         self.root.bind("<space>", self.on_space_key)
         self.root.bind("<Key-1>", self.on_key_1)
         self.root.bind("<Key-2>", self.on_key_2)
+        self.root.bind("<Left>", self.on_space_key)
+        self.root.bind("<Right>", self.on_key_1)
 
     # ------------------- 文件导入 -------------------
     def import_file(self):
@@ -223,4 +235,52 @@ class WordApp:
     def show_all_learned(self):
         """恢复所有为可见状态"""
         for iid, display in self.words_cache.items():
-            self.tree.item(iid, values=(display.word, display.trans, display.ipa, "播放", "显示", display.is_unlearned))
+            self.tree.item(iid, values=(display.word, display.trans, display.ipa, "播放", "隐藏", display.is_unlearned))
+
+    def on_cell_edited(self, row_id, col_name, new_value):
+        """
+        单元格编辑完成后的回调
+        """
+        print(f"[INFO] 单元格编辑完成: row_id={row_id}, col_name={col_name}, new_value={new_value}")
+
+        wd_original = self.words_cache.get(row_id)
+        if not wd_original:
+            return False
+        
+        old_value = getattr(wd_original, col_name)
+        if old_value == new_value:
+            return True  # 值未改变，不做任何操作
+
+        # --- 创建副本 ---
+        wd_copy = copy.deepcopy(wd_original)
+        setattr(wd_copy, col_name, new_value)
+
+        print(f"[INFO] 尝试更新 row_id={row_id}, col={col_name} 从 '{old_value}' -> '{new_value}'")
+
+        # 调用统一的数据库更新方法
+        try:
+            new_display = WordService.update_display(wd_copy, col_name)
+        except Exception as e:
+            print(f"[ERROR] 更新失败: {e}")
+            self._show_update_failed(col_name)
+            return False
+
+        if new_display:
+            # 更新缓存
+            self.words_cache[row_id] = new_display
+            return True
+        else:
+            self._show_update_failed(col_name)
+            return False
+        
+
+        # # 刷新 UI，例如重绘状态栏/某个统计区域
+        # self.refresh_some_ui_if_needed()
+
+
+    def _show_update_failed(self, col_name):
+        """失败提示（避免重复写 messagebox）"""
+        try:
+            messagebox.showerror("更新失败", f"无法更新字段 {col_name}，请重试。")
+        except Exception:
+            pass

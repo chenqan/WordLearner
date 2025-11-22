@@ -1,6 +1,7 @@
-from model.orm_models import Word, Display
+from model.orm_models import Word, Display, File
 from service.db_utils import auto_session
 from service.audio_service import AudioPlayer
+from util.audio_util import token2voice
 
 class WordDisplay:
     """UI 层显示所需的封装"""
@@ -9,11 +10,14 @@ class WordDisplay:
         self.iid = display.iid
         self.word_id = display.word_id
         self.file_id = display.file_id
-        self.word = display.word_ref.word
-        self.trans = display.word_ref.trans
-        self.ipa = display.word_ref.ipa
-        self.gtts = display.word_ref.gtts
-        self.is_unlearned = display.word_ref.is_unlearned
+        self.from_word(display.word_ref)
+    
+    def from_word(self, word: Word):
+        self.word = word.word
+        self.trans = word.trans
+        self.ipa = word.ipa
+        self.gtts = word.gtts
+        self.is_unlearned = word.is_unlearned
         self.audio = AudioPlayer(self.gtts)
 
 class WordService:
@@ -24,7 +28,7 @@ class WordService:
         with auto_session() as session:
             displays = (
                 session.query(Display)
-                .filter(Display.file_id == file_id)
+                .filter(Display.file_id == file_id) # pyright: ignore[reportOptionalCall]
                 .order_by(Display.id)
                 .offset(offset)
                 .limit(page_size)
@@ -35,7 +39,7 @@ class WordService:
     @staticmethod
     def count_displays(file_id):
         with auto_session() as session:
-            return session.query(Display).filter(Display.file_id == file_id).count()
+            return session.query(Display).filter(Display.file_id == file_id).count() # pyright: ignore[reportOptionalCall]
 
     @staticmethod
     def toggle_unlearned(word_display: WordDisplay) -> WordDisplay:
@@ -43,5 +47,32 @@ class WordService:
         with auto_session() as session:
             d = session.query(Display).filter_by(iid=word_display.iid).first()
             d.word_ref.is_unlearned = new_status
+            session.flush()
+            return WordDisplay(d)
+        
+    @staticmethod
+    def update_display(word_display: WordDisplay, field: str):
+        """
+        根据 WordDisplay 对象更新数据库。
+        UI 层只需要给我 display + 哪个字段被改了即可。
+        """
+        # 获取字段值
+        field_val = getattr(word_display, field, None)
+        if field_val is None:
+            return None
+
+        with auto_session() as session:
+            d = session.query(Display).filter_by(iid=word_display.iid).first()
+            if not d:
+                return None
+
+            # 特殊逻辑：修改 word 时生成 gtts
+            if field == "word":
+                try:
+                    d.word_ref.gtts = token2voice(field_val)
+                except Exception as e:
+                    print(f"TTS 生成失败: {field_val} ({e})")
+
+            setattr(d.word_ref, field, field_val)
             session.flush()
             return WordDisplay(d)
